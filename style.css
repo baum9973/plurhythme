@@ -1,0 +1,17 @@
+/* canvasを縦横比を保ったまま画面に収める。余白は黒 */
+html, body {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  background: #000;
+  overflow: hidden;
+}
+
+#gameCanvas {
+  display: block;
+  width: 100vw;
+  height: 100vh;
+  object-fit: contain;
+  touch-action: none;
+  user-select: none;
+}

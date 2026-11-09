@@ -1,16 +1,37 @@
 /* ===== 定数（ユーザーごとに変わらないもの）===== */
 const canvasLogicalWidth = 1920;
 const canvasLogicalHeight = 1080;
-// link を空にすると「<キー>がありません」を出して続行する（画像は枠線、音声はスキップ）
-const audioFiles = Object.freeze({
-  titlebgm: { link: "" }, resultbgm: { link: "" }, song1: { link: "" },
-  buttonclick: { link: "" }, hitperfect: { link: "" }, hitgood: { link: "" }, hitmiss: { link: "" },
-});
-const imageFiles = Object.freeze({
-  load1: { link: "" }, load2: { link: "" }, titleimg: { link: "" }, titlelogo: { link: "" },
-  startbutton: { link: "" }, playbutton: { link: "" }, returnbutton: { link: "" }, retrybutton: { link: "" },
-  maincharacter_back: { link: "" }, maincharacter_front: { link: "" },
-});
+// link を空にすると「<キー>がありません」を出して続行する（画像は枠線、音声はスキップ）。キーは先に全部用意してあり、素材ができたら link に書く
+function createFileTable(keys) {
+  const table = {};
+  for (let index = 0; index < keys.length; index++) table[keys[index]] = { link: "" };
+  return Object.freeze(table);
+}
+function createNumberedKeys(prefix, count, digits) {
+  const keys = [];
+  for (let number = 1; number <= count; number++) keys.push(prefix + String(number).padStart(digits, "0"));
+  return keys;
+}
+const audioFiles = createFileTable([
+  "titlebgm", "storybgm", "resultbgm", "song1",
+  "buttonclick", "lanemove", "countdown", "go",
+  "hitperfect", "hitgood", "hitmiss", "hitsoundshard", "hitdamage",
+  "clearjingle", "fullcombojingle", "allperfectjingle",
+]);
+const imageFiles = createFileTable([
+  "load1", "load2", "nextbutton", "titleimg", "titlelogo", "startbutton", "skipbutton",
+].concat(createNumberedKeys("storyimg", 16, 2), [
+  "selectbackground", "playbutton", "settingbutton", "returnbutton", "songframe",
+  "difficulty_easy", "difficulty_normal", "difficulty_hard",
+  "playbackground", "maincharacter_back", "note_tap", "note_soundshard", "note_damage",
+  "judge_perfect", "judge_good", "judge_miss", "readyimg", "goimg", "countdown_3", "countdown_2", "countdown_1",
+  "pausebutton", "resumebutton", "restartbutton", "clearimg", "fullcomboimg", "allperfectimg",
+  "resultbackground", "retrybutton", "rankSS", "rankS", "rankA", "rankB", "rankC", "rankD",
+  "maincharacter_front", "newrecord",
+  "judgeoffset_minus100", "judgeoffset_minus10", "judgeoffset_minus1",
+  "judgeoffset_plus1", "judgeoffset_plus10", "judgeoffset_plus100",
+  "loginbutton", "registerbutton", "deletedatabutton", "logoutbutton",
+]));
 const loadingAnimationImageKeys = Object.freeze(["load1", "load2"]);
 const loadingSwitchIntervalMilliseconds = 150;
 const difficultyNames = Object.freeze(["easy", "normal", "hard"]);
@@ -86,6 +107,7 @@ let nextButtonList = [];
 let currentMusic = null;
 
 function saveStoredValue(name, value) {
+  if (name === "highScores") highScoreCache = null;
   try { localStorage.setItem(storageKeyPrefix + name, JSON.stringify(value)); } catch (error) { console.log("保存できませんでした"); }
 }
 function loadStoredValue(name, fallbackValue) {
@@ -160,26 +182,45 @@ function drawText(text, x, y, size, align, color) {
   context.fillStyle = color || "#ffffff";
   context.fillText(text, x, y);
 }
+const buttonHoverScale = 1.08;
+let pointerPosition = { x: -1, y: -1 };
+function drawRoundedRect(x, y, width, height, radius) {
+  context.beginPath();
+  context.moveTo(x + radius, y);
+  context.arcTo(x + width, y, x + width, y + height, radius);
+  context.arcTo(x + width, y + height, x, y + height, radius);
+  context.arcTo(x, y + height, x, y, radius);
+  context.arcTo(x, y, x + width, y, radius);
+  context.closePath();
+}
 function drawButton(label, x, y, width, height, imageKey, onClick) {
+  const isHovered = pointerPosition.x >= x && pointerPosition.x <= x + width && pointerPosition.y >= y && pointerPosition.y <= y + height;
   const image = imageKey ? getImage(imageKey) : null;
+  context.save();
+  context.translate(x + width / 2, y + height / 2);
+  if (isHovered) context.scale(buttonHoverScale, buttonHoverScale);
   if (image) {
-    context.drawImage(image, x, y, width, height);
+    context.drawImage(image, -width / 2, -height / 2, width, height);
   } else {
-    context.fillStyle = "rgba(20, 40, 70, 0.8)";
-    context.fillRect(x, y, width, height);
+    context.fillStyle = isHovered ? "rgba(40, 80, 130, 0.95)" : "rgba(20, 40, 70, 0.85)";
+    drawRoundedRect(-width / 2, -height / 2, width, height, Math.min(24, height / 3));
+    context.fill();
     context.strokeStyle = "#7fd8ff";
     context.lineWidth = 3;
-    context.strokeRect(x, y, width, height);
-    drawText(label, x + width / 2, y + height / 2, Math.min(44, height * 0.5), "center");
+    context.stroke();
+    drawText(label, 0, 0, Math.min(44, height * 0.5), "center");
   }
+  context.restore();
   nextButtonList.push({ x: x, y: y, width: width, height: height, onClick: onClick });
 }
-function drawImageOrFrame(key, x, y, width, height) {
+function drawImageOrFrame(key, x, y, width, height, label) {
   const image = getImage(key);
   if (image) { context.drawImage(image, x, y, width, height); return; }
   context.strokeStyle = "#7fd8ff";
   context.lineWidth = 3;
-  context.strokeRect(x, y, width, height);
+  drawRoundedRect(x, y, width, height, 20);
+  context.stroke();
+  drawText(label === undefined ? key : label, x + width / 2, y + height / 2, Math.min(40, height / 4), "center");
 }
 function convertToLogicalPoint(clientX, clientY) {
   const rectangle = canvas.getBoundingClientRect();
@@ -188,8 +229,29 @@ function convertToLogicalPoint(clientX, clientY) {
   const offsetY = (rectangle.height - canvasLogicalHeight * scale) / 2;
   return { x: (clientX - rectangle.left - offsetX) / scale, y: (clientY - rectangle.top - offsetY) / scale };
 }
+/* ポインター: 動くたびに位置を覚える（ホバー拡大用）。押した時はスライダー→ボタンの順に判定し、
+   スライダーは押したまま動かすと値が変わる（setPointerCapture で枠外に出ても追従） */
+let sliderList = [];
+let nextSliderList = [];
+let activeSlider = null;
+canvas.addEventListener("pointermove", function (event) {
+  pointerPosition = convertToLogicalPoint(event.clientX, event.clientY);
+  if (activeSlider) updateSliderValue(activeSlider, pointerPosition.x);
+});
+canvas.addEventListener("pointerup", function () { activeSlider = null; });
+canvas.addEventListener("pointerleave", function () { pointerPosition = { x: -1, y: -1 }; });
 canvas.addEventListener("pointerdown", function (event) {
   const point = convertToLogicalPoint(event.clientX, event.clientY);
+  pointerPosition = point;
+  for (let index = sliderList.length - 1; index >= 0; index--) {
+    const slider = sliderList[index];
+    if (point.x >= slider.x && point.x <= slider.x + slider.width && point.y >= slider.y && point.y <= slider.y + slider.height) {
+      activeSlider = slider;
+      canvas.setPointerCapture(event.pointerId);
+      updateSliderValue(slider, point.x);
+      return;
+    }
+  }
   for (let index = buttonList.length - 1; index >= 0; index--) {
     const button = buttonList[index];
     if (point.x >= button.x && point.x <= button.x + button.width && point.y >= button.y && point.y <= button.y + button.height) {
@@ -238,30 +300,44 @@ function drawTitleScene() {
    ↑↓で曲、←→で難易度を選ぶ（クリックでも可）。選択中の曲は少し大きく表示。ハイスコアは保存データから表示 */
 let selectedSongIndex = 0;
 let selectedDifficultyIndex = 0;
-function getHighScoreEntry(songKey, difficultyName) {
-  return loadStoredValue("highScores", {})[songKey + "_" + difficultyName] || null;
+const statusNames = Object.freeze({ 1: "FAILED", 2: "CLEAR", 3: "FULL COMBO", 4: "ALL PERFECT" });
+let highScoreCache = null;
+function getHighScores() {
+  if (highScoreCache) return highScoreCache;
+  highScoreCache = loadStoredValue("highScores", {});
+  const entryKeys = Object.keys(highScoreCache);
+  for (let index = 0; index < entryKeys.length; index++) {
+    const entry = highScoreCache[entryKeys[index]];
+    if (entry.status === undefined) entry.status = entry.allPerfect ? 4 : entry.fullCombo ? 3 : 2;
+  }
+  return highScoreCache;
 }
+function getHighScoreEntry(songKey, difficultyName) { return getHighScores()[songKey + "_" + difficultyName] || null; }
 function drawSongSelectScene() {
   context.fillStyle = "#0b1020";
   context.fillRect(0, 0, canvasLogicalWidth, canvasLogicalHeight);
   for (let index = 0; index < songKeys.length; index++) {
     const isSelected = index === selectedSongIndex;
-    const rowHeight = isSelected ? 120 : 90;
     const rowIndex = index;
-    drawButton(songs[songKeys[index]].title, 120, 300 + index * 140 - (isSelected ? 15 : 0), isSelected ? 900 : 820, rowHeight, null, function () { selectedSongIndex = rowIndex; });
+    drawButton(songs[songKeys[index]].title, 100, 300 + index * 140 - (isSelected ? 15 : 0), isSelected ? 960 : 880, isSelected ? 120 : 90, null, function () { selectedSongIndex = rowIndex; });
   }
   for (let index = 0; index < difficultyNames.length; index++) {
     const difficultyIndex = index;
-    const isSelected = index === selectedDifficultyIndex;
-    drawButton((isSelected ? "▶ " : "") + difficultyNames[index], 1180, 300 + index * 110, 460, 90, null, function () { selectedDifficultyIndex = difficultyIndex; });
+    drawButton(difficultyNames[index], 1080 + index * 270, 300, 250, 100, null, function () { selectedDifficultyIndex = difficultyIndex; });
+    if (index === selectedDifficultyIndex) {
+      context.strokeStyle = "#ffe066"; context.lineWidth = 6;
+      drawRoundedRect(1080 + index * 270 - 4, 296, 258, 108, 30);
+      context.stroke();
+    }
   }
   const songKey = songKeys[selectedSongIndex];
   const difficultyName = difficultyNames[selectedDifficultyIndex];
-  const difficultyValue = songs[songKey][difficultyName].difficulty;
   const entry = getHighScoreEntry(songKey, difficultyName);
-  drawText("Lv." + Math.floor(difficultyValue), 1180, 700, 54, "left");
-  drawText(entry ? "HIGH SCORE " + entry.score + "  " + entry.rank + (entry.allPerfect ? "  AP" : entry.fullCombo ? "  FC" : "") : "HIGH SCORE ---", 1180, 790, 44, "left");
-  drawButton("ゲームスタート", 1180, 880, 460, 110, "playbutton", function () { startPlay(songKey, difficultyName); });
+  drawText("Lv." + Math.floor(songs[songKey][difficultyName].difficulty), 1080, 520, 64, "left");
+  drawText(entry ? calculateRankName(entry.score) : "-", 1340, 520, 64, "left", "#ffe066");
+  drawText(entry ? statusNames[entry.status] : "---", 1500, 520, 48, "left");
+  drawText("HIGH SCORE  " + (entry ? String(entry.score).padStart(7, "0") : "---"), 1080, 620, 48, "left");
+  drawButton("ゲームスタート", 1080, 780, 780, 120, "playbutton", function () { startPlay(songKey, difficultyName); });
   drawButton("戻る", 60, 60, 160, 90, "returnbutton", function () { currentScene = "title"; });
   drawButton("設定", 260, 60, 200, 90, "settingbutton", function () { openSettings("songSelect"); });
 }
@@ -331,7 +407,7 @@ function startPlay(songKey, difficultyName) {
     mode: "running", playTimeMilliseconds: 0, countdownRemaining: 0, endTimer: 0,
     currentLaneIndex: 0, visualLanePosition: 0, laneActiveUntil: {},
     score: 0, combo: 0, maxCombo: 0, hitPoints: maximumHitPoints, comboBreakCount: 0,
-    judgeCounts: { PERFECT: 0, GOOD: 0, MISS: 0 }, lastJudge: null, lastJudgeTime: 0,
+    judgeCounts: { PERFECT: 0, GOOD: 0, MISS: 0 }, lastJudge: null, lastJudgeTime: 0, fastCount: 0, lateCount: 0, lastFastLate: "", pendingHitTime: null, pendingHitDeadline: 0, isEffectSoundPlayed: false,
     totalTapCount: totalTapCount, totalSoundShardCount: totalSoundShardCount, collectedSoundShardCount: 0,
   };
   play.playTimeMilliseconds = play.startTime;
@@ -347,8 +423,12 @@ function startPlay(songKey, difficultyName) {
 function getJudgeTime() { return play.playTimeMilliseconds + settings.judgeOffsetMilliseconds; }
 function updateComboBreak() { play.combo = 0; play.comboBreakCount++; }
 function updateHitPoints(amount) { play.hitPoints = Math.max(0, Math.min(maximumHitPoints, play.hitPoints + amount)); }
-function updateJudgeResult(judgeName) {
+function updateJudgeResult(judgeName, earlyMilliseconds) {
   play.judgeCounts[judgeName]++;
+  if (judgeName === "GOOD") {
+    if (earlyMilliseconds > 0) play.fastCount++; else play.lateCount++;
+    play.lastFastLate = earlyMilliseconds > 0 ? "FAST" : "LATE";
+  }
   play.lastJudge = judgeName;
   play.lastJudgeTime = play.playTimeMilliseconds;
   play.score += fullScore / play.totalTapCount * judgeScoreRatios[judgeName];
@@ -365,8 +445,10 @@ function isLaneActive(lane) {
   const activeUntil = play.laneActiveUntil[lane];
   return activeUntil !== undefined && activeUntil >= getJudgeTime();
 }
-function handleHitKey() {
-  const judgeTime = getJudgeTime();
+/* 同時押し対策: 打鍵した瞬間に判定できるノーツがあれば、そのまま判定する。
+   なければ simultaneousInputWindowMilliseconds だけ待ち、その間に移動キーが来たら、移動してから「打鍵した時刻」で判定する */
+const simultaneousInputWindowMilliseconds = 40;
+function findHitTarget(judgeTime) {
   let target = null;
   let smallestDifference = Infinity;
   for (let index = 0; index < play.notes.length; index++) {
@@ -375,19 +457,34 @@ function handleHitKey() {
     const difference = Math.abs(note.timeMilliseconds - judgeTime);
     if (difference <= judgeWidthMilliseconds[1] && difference < smallestDifference) { target = note; smallestDifference = difference; }
   }
+  return target ? { note: target, difference: smallestDifference } : null;
+}
+function handleHitKey(pressJudgeTime) {
+  const target = findHitTarget(pressJudgeTime);
   if (!target) return;
-  target.isResolved = true;
-  const judgeName = smallestDifference <= judgeWidthMilliseconds[0] ? "PERFECT" : "GOOD";
-  updateJudgeResult(judgeName);
+  target.note.isResolved = true;
+  const judgeName = target.difference <= judgeWidthMilliseconds[0] ? "PERFECT" : "GOOD";
+  updateJudgeResult(judgeName, target.note.timeMilliseconds - pressJudgeTime);
   playSoundEffect(judgeName === "PERFECT" ? "hitperfect" : "hitgood", settings.playSeVolume * (judgeName === "PERFECT" ? settings.hitPerfectVolume : settings.hitGoodVolume) / 100);
+}
+function handleHitKeyPress() {
+  const judgeTime = getJudgeTime();
+  if (findHitTarget(judgeTime)) { handleHitKey(judgeTime); return; }
+  play.pendingHitTime = judgeTime;
+  play.pendingHitDeadline = play.playTimeMilliseconds + simultaneousInputWindowMilliseconds;
 }
 function updateJudgement() {
   const judgeTime = getJudgeTime();
   play.laneActiveUntil[play.currentLaneIndex] = judgeTime + judgeWidthMilliseconds[2];
+  if (play.pendingHitTime !== null && play.playTimeMilliseconds >= play.pendingHitDeadline) {
+    const pressTime = play.pendingHitTime;
+    play.pendingHitTime = null;
+    handleHitKey(pressTime);
+  }
   for (let index = 0; index < play.notes.length; index++) {
     const note = play.notes[index];
     if (note.isResolved) continue;
-    if (note.type === noteTypes.tap && judgeTime > note.timeMilliseconds + judgeWidthMilliseconds[1]) {
+    if (note.type === noteTypes.tap && judgeTime > note.timeMilliseconds + judgeWidthMilliseconds[1] + (play.pendingHitTime === null ? 0 : simultaneousInputWindowMilliseconds)) {
       note.isResolved = true;
       updateJudgeResult("MISS");
       playSoundEffect("hitmiss", settings.playSeVolume * settings.hitMissVolume / 100);
@@ -395,7 +492,7 @@ function updateJudgement() {
       const windowMilliseconds = note.type === noteTypes.soundShard ? soundShardCollectWindowMilliseconds : damageTouchWindowMilliseconds;
       if (Math.abs(note.timeMilliseconds - judgeTime) <= windowMilliseconds && isLaneActive(note.lane)) {
         note.isResolved = true;
-        if (note.type === noteTypes.soundShard) { play.collectedSoundShardCount++; } else { updateComboBreak(); updateHitPoints(-hitPointsLostOnDamage); }
+        if (note.type === noteTypes.soundShard) { play.collectedSoundShardCount++; playSoundEffect("hitsoundshard", settings.playSeVolume); } else { updateComboBreak(); updateHitPoints(-hitPointsLostOnDamage); playSoundEffect("hitdamage", settings.playSeVolume); }
       } else if (judgeTime > note.timeMilliseconds + windowMilliseconds) {
         note.isResolved = true;
       }
@@ -408,7 +505,16 @@ function updateJudgement() {
    端のレーン（±(laneCount-1)/2）より先には動かない */
 function handleLaneMove(direction) {
   const edge = (play.song.laneCount - 1) / 2;
+  const previousLaneIndex = play.currentLaneIndex;
   play.currentLaneIndex = Math.max(-edge, Math.min(edge, play.currentLaneIndex + direction));
+  if (play.currentLaneIndex === previousLaneIndex) return;
+  playSoundEffect("lanemove", settings.playSeVolume);
+  play.laneActiveUntil[play.currentLaneIndex] = getJudgeTime() + judgeWidthMilliseconds[2];
+  if (play.pendingHitTime !== null) {
+    const pressTime = play.pendingHitTime;
+    play.pendingHitTime = null;
+    handleHitKey(pressTime);
+  }
 }
 function updateVisualLane(deltaMilliseconds) {
   const difference = play.currentLaneIndex - play.visualLanePosition;
@@ -432,6 +538,11 @@ function updatePlay(deltaMilliseconds) {
   if (play.mode === "ending") {
     play.endTimer += deltaMilliseconds;
     updateVisualLane(deltaMilliseconds);
+    if (!play.isEffectSoundPlayed && play.endTimer >= resultEffectDelayMilliseconds) {
+      play.isEffectSoundPlayed = true;
+      const jingleKeys = { "ALL PERFECT": "allperfectjingle", "FULL COMBO": "fullcombojingle", "CLEAR": "clearjingle" };
+      if (jingleKeys[getEndEffectLabel()]) playSoundEffect(jingleKeys[getEndEffectLabel()], settings.playSeVolume);
+    }
     if (play.endTimer >= resultEffectDelayMilliseconds + resultEffectDisplayMilliseconds + resultFadeOutMilliseconds) startResult();
   }
 }
@@ -527,6 +638,7 @@ function drawPlayScene() {
     drawText("COMBO", comboX, comboY + 80, 40, "center");
   }
   if (play.lastJudge && settings["is" + play.lastJudge.charAt(0) + play.lastJudge.slice(1).toLowerCase() + "Displayed"] && play.playTimeMilliseconds - play.lastJudgeTime < 300) drawText(play.lastJudge, canvasLogicalWidth / 2, canvasLogicalHeight * 0.62, 64, "center", play.lastJudge === "MISS" ? "#ff8899" : "#ffffff");
+  if (play.lastJudge === "GOOD" && settings.isFastLateDisplayed && play.playTimeMilliseconds - play.lastJudgeTime < 300) drawText(play.lastFastLate, canvasLogicalWidth / 2, canvasLogicalHeight * 0.62 - 70, 38, "center", play.lastFastLate === "FAST" ? "#6ec1ff" : "#ff7a7a");
   const elapsed = play.playTimeMilliseconds - play.startTime;
   if (elapsed < readyDisplayMilliseconds) drawText("Ready...", 960, 400, 110, "center");
   else if (elapsed < readyDisplayMilliseconds + goDisplayMilliseconds) drawText("Go!", 960, 400, 130, "center");
@@ -564,18 +676,15 @@ function startResult() {
   const reward = play.totalSoundShardCount === 0 ? 0 : Math.floor(Math.pow(play.collectedSoundShardCount / play.totalSoundShardCount * difficultyValue * soundShardRewardMultiple, soundShardRewardExponent));
   const isFullCombo = play.comboBreakCount === 0;
   const isAllPerfect = isFullCombo && play.judgeCounts.GOOD === 0;
-  const highScores = loadStoredValue("highScores", {});
+  const status = isAllPerfect ? 4 : isFullCombo ? 3 : play.hitPoints > 0 ? 2 : 1;
+  const highScores = Object.assign({}, getHighScores());
   const entryKey = play.songKey + "_" + play.difficultyName;
   const previous = highScores[entryKey];
-  const isNewRecord = !previous || score > previous.score;
-  highScores[entryKey] = {
-    score: isNewRecord ? score : previous.score, rank: isNewRecord ? calculateRankName(score) : previous.rank,
-    maxCombo: isNewRecord ? play.maxCombo : previous.maxCombo, fullCombo: isNewRecord ? isFullCombo : previous.fullCombo,
-    allPerfect: isNewRecord ? isAllPerfect : previous.allPerfect, playCount: (previous ? previous.playCount : 0) + 1,
-  };
+  const isNewRecord = !previous || score > previous.score || status > previous.status;
+  highScores[entryKey] = mergeScoreEntries(previous || { score: 0, status: 1, maxCombo: 0, playCount: 0 }, { score: score, status: status, maxCombo: play.maxCombo, playCount: (previous ? previous.playCount : 0) + 1 });
   saveStoredValue("highScores", highScores);
   saveStoredValue("soundShards", loadStoredValue("soundShards", 0) + reward);
-  result = { score: score, rank: calculateRankName(score), isNewRecord: isNewRecord, isFullCombo: isFullCombo, isAllPerfect: isAllPerfect, counts: Object.assign({}, play.judgeCounts), maxCombo: play.maxCombo, songKey: play.songKey, difficultyName: play.difficultyName };
+  result = { score: score, rank: calculateRankName(score), isNewRecord: isNewRecord, isFullCombo: isFullCombo, isAllPerfect: isAllPerfect, counts: Object.assign({}, play.judgeCounts), fastCount: play.fastCount, lateCount: play.lateCount, maxCombo: play.maxCombo, songKey: play.songKey, difficultyName: play.difficultyName };
   stopSongAudio();
   saveCloudAll();
   startBackgroundMusic("resultbgm");
@@ -585,15 +694,19 @@ function drawResultScene() {
   context.fillStyle = "#0b1020"; context.fillRect(0, 0, canvasLogicalWidth, canvasLogicalHeight);
   drawText(songs[result.songKey].title + "  [" + result.difficultyName + " Lv." + Math.floor(songs[result.songKey][result.difficultyName].difficulty) + "]", 960, 70, 56, "center");
   drawImageOrFrame("maincharacter_front", 120, 160, 780, 820);
-  drawImageOrFrame("rank" + result.rank, 1000, 150, 220, 220);
-  drawText(result.rank + "  " + String(result.score).padStart(7, "0"), 1260, 250, 80, "left");
+  drawImageOrFrame("rank" + result.rank, 1000, 150, 220, 220, result.rank);
+  drawText(String(result.score).padStart(7, "0"), 1260, 250, 80, "left");
   if (result.isNewRecord) drawText("NEW RECORD", 1260, 330, 36, "left", "#ffe066");
   for (let index = 0; index < judgeNames.length; index++) {
     drawText(judgeNames[index], 1060, 450 + index * 70, 48, "left");
     drawText(String(result.counts[judgeNames[index]]), 1700, 450 + index * 70, 48, "right");
   }
-  drawText(result.isAllPerfect ? "ALL PERFECT" : result.isFullCombo ? "FULL COMBO" : "", 1380, 720, 60, "center", "#ffe066");
-  drawText("MAX COMBO  " + result.maxCombo, 1060, 820, 52, "left");
+  drawText("FAST", 1100, 640, 34, "left", "#6ec1ff");
+  drawText(String(result.fastCount), 1700, 640, 34, "right");
+  drawText("LATE", 1100, 682, 34, "left", "#ff7a7a");
+  drawText(String(result.lateCount), 1700, 682, 34, "right");
+  drawText(result.isAllPerfect ? "ALL PERFECT" : result.isFullCombo ? "FULL COMBO" : "", 1380, 770, 60, "center", "#ffe066");
+  drawText("MAX COMBO  " + result.maxCombo, 1060, 860, 52, "left");
   drawButton("リトライ", 1000, 910, 380, 100, "retrybutton", function () { startPlay(result.songKey, result.difficultyName); });
   drawButton("曲選択へ", 1440, 910, 380, 100, "returnbutton", function () { currentScene = "songSelect"; });
 }
@@ -618,7 +731,7 @@ document.addEventListener("keydown", function (event) {
     if (play.mode !== "running") return;
     if (hasKey("moveLeft", key)) handleLaneMove(-1);
     if (hasKey("moveRight", key)) handleLaneMove(1);
-    if (hasKey("hit", key)) handleHitKey();
+    if (hasKey("hit", key)) handleHitKeyPress();
   } else if (currentScene === "result") {
     if (key === "enter") startPlay(result.songKey, result.difficultyName);
     if (key === "escape") currentScene = "songSelect";
@@ -632,12 +745,14 @@ window.addEventListener("blur", function () { if (currentScene === "play" && pla
 Object.assign(settings, {
   systemBgmVolume: 100, playBgmVolume: 100, systemSeVolume: 100, playSeVolume: 100,
   hitPerfectVolume: 100, hitGoodVolume: 100, hitMissVolume: 0, isPerfectDisplayed: 1, isGoodDisplayed: 1, isMissDisplayed: 1,
+  isFastLateDisplayed: 0, accelerationMode: "none", customAccelerationExponent: 1,
 });
 const keyBindings = JSON.parse(JSON.stringify(defaultKeyBindings));
 function loadSettings() {
   const stored = loadStoredValue("settings", {});
   Object.assign(settings, stored.values || {});
   Object.assign(keyBindings, stored.keys || {});
+  updateAccelerationExponent();
 }
 function saveSettings() {
   saveStoredValue("settings", { values: settings, keys: keyBindings });
@@ -715,36 +830,46 @@ function drawStoryScene() {
   context.fillStyle = "#0b1020"; context.fillRect(0, 0, canvasLogicalWidth, canvasLogicalHeight);
   if (image) context.drawImage(image, 0, 0, canvasLogicalWidth, canvasLogicalHeight);
   nextButtonList.push({ x: 0, y: 0, width: canvasLogicalWidth, height: canvasLogicalHeight, onClick: advanceStory });
-  drawText(storyLines[storyIndex], 960, 540, 56, "center");
+  if (!image) drawText(storyLines[storyIndex], 960, 540, 56, "center");
   drawButton("スキップ", 1660, 40, 220, 80, "skipbutton", finishStory);
 }
 
 /* ===== 設定画面 =====
-   タブ（プレイ/画面/音/キー/アカウント）ごとに、settingTabs の行を並べて描く。
-   数値の行は、刻みの配列 steps から「-大…-小 +小…+大」のボタンを作る（Canvasには入力欄がないため）。
-   キーの行は「追加」を押した次のキー入力を割り当てる。競合は拒否し、1動作4キーまで */
+   タブ（プレイ/画面/音/キー/アカウント）ごとに settingTabs の行を描く。行の種類:
+   slider = 上限下限のある値。押して左右にドラッグして変える
+   buttons = 刻みボタン。「-大 … -小 [現在値] +小 … +大」と、中央に現在値を置く
+   toggles = 1行に2つのON/OFFスイッチ    acceleration = なし/弱/強/カスタムの4択（カスタムの時だけスライダー）
+   キーの行は「追加」を押した次のキー入力を割り当てる（競合は拒否、1動作4キーまで） */
+const accelerationPresets = Object.freeze({ none: 1, weak: 0.85, strong: 0.7 });
+const accelerationModeLabels = Object.freeze({ none: "なし", weak: "弱", strong: "強", custom: "カスタム" });
+function updateAccelerationExponent() {
+  settings.accelerationExponent = settings.accelerationMode === "custom" ? settings.customAccelerationExponent : accelerationPresets[settings.accelerationMode];
+}
+function createSliderRow(key, label, min, max, step, displayScale, unit) {
+  return { type: "slider", key: key, label: label, min: min, max: max, step: step, displayScale: displayScale, unit: unit };
+}
+const customAccelerationRow = createSliderRow("customAccelerationExponent", "", 0.1, 1.5, 0.01, 1, "");
 const settingTabs = Object.freeze({
   play: { label: "プレイ", rows: [
-    { key: "noteFallSpeed", label: "落下速度", min: 1, max: 20, steps: [1, 0.1, 0.01] },
-    { key: "accelerationExponent", label: "加速(小さいほど手前で加速)", min: 0.1, max: 1.5, steps: [0.1, 0.01] },
-    { key: "judgeOffsetMilliseconds", label: "判定ズレ(ms)", min: -9999, max: 9999, steps: [100, 10, 1] }] },
+    { type: "buttons", key: "noteFallSpeed", label: "落下速度", min: 1, max: 20, steps: [1, 0.1, 0.01] },
+    { type: "acceleration", label: "ノーツの加速" },
+    { type: "buttons", key: "judgeOffsetMilliseconds", label: "判定ズレ(ms)", min: -9999, max: 9999, steps: [100, 10, 1] }] },
   screen: { label: "画面", rows: [
-    { key: "farLaneWidthRatio", label: "奥のレーン幅", min: 0.01, max: 1, steps: [0.1, 0.01] },
-    { key: "laneWidthAtJudgeLine", label: "判定ライン上のレーン幅", min: 100, max: 600, steps: [50, 10] },
-    { key: "guideOpacityPercent", label: "ガイドの濃さ(%)", min: 10, max: 100, steps: [10, 1] },
-    { key: "comboPositionXPercent", label: "コンボ位置 x(%)", min: 0, max: 100, steps: [10, 1] },
-    { key: "comboPositionYPercent", label: "コンボ位置 y(%)", min: 0, max: 100, steps: [10, 1] },
-    { key: "isPerfectDisplayed", label: "PERFECT表示", min: 0, max: 1, steps: [1] },
-    { key: "isGoodDisplayed", label: "GOOD表示", min: 0, max: 1, steps: [1] },
-    { key: "isMissDisplayed", label: "MISS表示", min: 0, max: 1, steps: [1] }] },
+    createSliderRow("farLaneWidthRatio", "奥のレーン幅", 0.01, 1, 0.01, 100, "%"),
+    createSliderRow("laneWidthAtJudgeLine", "判定ライン上のレーン幅", 100, 600, 1, 1, "px"),
+    createSliderRow("guideOpacityPercent", "ガイドの濃さ", 10, 100, 1, 1, "%"),
+    createSliderRow("comboPositionXPercent", "コンボ位置 x", 0, 100, 1, 1, "%"),
+    createSliderRow("comboPositionYPercent", "コンボ位置 y", 0, 100, 1, 1, "%"),
+    { type: "toggles", items: [["isPerfectDisplayed", "PERFECT表示"], ["isGoodDisplayed", "GOOD表示"]] },
+    { type: "toggles", items: [["isMissDisplayed", "MISS表示"], ["isFastLateDisplayed", "FAST/LATE表示"]] }] },
   sound: { label: "音", rows: [
-    { key: "systemBgmVolume", label: "システムBGM", min: 0, max: 200, steps: [10, 1] },
-    { key: "playBgmVolume", label: "プレイBGM", min: 0, max: 200, steps: [10, 1] },
-    { key: "systemSeVolume", label: "システムSE", min: 0, max: 200, steps: [10, 1] },
-    { key: "playSeVolume", label: "プレイSE", min: 0, max: 200, steps: [10, 1] },
-    { key: "hitPerfectVolume", label: "打鍵音 PERFECT", min: 0, max: 200, steps: [10, 1] },
-    { key: "hitGoodVolume", label: "打鍵音 GOOD", min: 0, max: 200, steps: [10, 1] },
-    { key: "hitMissVolume", label: "打鍵音 MISS", min: 0, max: 200, steps: [10, 1] }] },
+    createSliderRow("systemBgmVolume", "システムBGM", 0, 200, 1, 1, "%"),
+    createSliderRow("playBgmVolume", "プレイBGM", 0, 200, 1, 1, "%"),
+    createSliderRow("systemSeVolume", "システムSE", 0, 200, 1, 1, "%"),
+    createSliderRow("playSeVolume", "プレイSE", 0, 200, 1, 1, "%"),
+    createSliderRow("hitPerfectVolume", "打鍵音 PERFECT", 0, 200, 1, 1, "%"),
+    createSliderRow("hitGoodVolume", "打鍵音 GOOD", 0, 200, 1, 1, "%"),
+    createSliderRow("hitMissVolume", "打鍵音 MISS", 0, 200, 1, 1, "%")] },
   keys: { label: "キー", rows: [] },
   account: { label: "アカウント", rows: [] },
 });
@@ -758,6 +883,13 @@ function closeSettings() { waitingKeyAction = null; settingsMessage = ""; saveSe
 function updateSettingValue(row, delta) {
   settings[row.key] = Math.max(row.min, Math.min(row.max, Math.round((settings[row.key] + delta) * 100) / 100));
 }
+function updateSliderValue(slider, pointerX) {
+  const row = slider.row;
+  const ratio = Math.max(0, Math.min(1, (pointerX - slider.trackX) / slider.trackWidth));
+  const stepped = Math.round((row.min + ratio * (row.max - row.min)) / row.step) * row.step;
+  settings[row.key] = Math.max(row.min, Math.min(row.max, Math.round(stepped * 100) / 100));
+  if (row.key === "customAccelerationExponent") updateAccelerationExponent();
+}
 function handleSettingsKey(key) {
   if (currentScene !== "settings" || !waitingKeyAction) return false;
   const actionNames = Object.keys(keyBindings);
@@ -770,21 +902,67 @@ function handleSettingsKey(key) {
   waitingKeyAction = null;
   return true;
 }
+function drawSliderControl(row, y, trackX, trackWidth) {
+  const ratio = (settings[row.key] - row.min) / (row.max - row.min);
+  context.fillStyle = "rgba(255,255,255,0.2)";
+  drawRoundedRect(trackX, y + 24, trackWidth, 16, 8); context.fill();
+  context.fillStyle = "#7fd8ff";
+  drawRoundedRect(trackX, y + 24, Math.max(16, trackWidth * ratio), 16, 8); context.fill();
+  context.fillStyle = "#ffffff";
+  context.beginPath(); context.arc(trackX + trackWidth * ratio, y + 32, 20, 0, Math.PI * 2); context.fill();
+  drawText(String(Math.round(settings[row.key] * row.displayScale * 100) / 100) + row.unit, trackX + trackWidth + 50, y + 32, 38, "left");
+  nextSliderList.push({ x: trackX - 20, y: y, width: trackWidth + 40, height: 64, row: row, trackX: trackX, trackWidth: trackWidth });
+}
+function drawStepButtons(row, y) {
+  const centerX = 1130;
+  const stepCount = row.steps.length;
+  drawText(String(settings[row.key]), centerX, y + 32, 44, "center");
+  for (let index = 0; index < stepCount; index++) {
+    const step = row.steps[index];
+    const offset = (stepCount - 1 - index) * 120;
+    const deltas = [-step, step];
+    const xPositions = [centerX - 220 - offset, centerX + 110 + offset];
+    for (let side = 0; side < 2; side++) {
+      const delta = deltas[side];
+      const imageKey = row.key === "judgeOffsetMilliseconds" ? "judgeoffset_" + (delta < 0 ? "minus" : "plus") + Math.abs(delta) : null;
+      drawButton((delta > 0 ? "+" : "") + delta, xPositions[side], y, 110, 64, imageKey, function () { updateSettingValue(row, delta); });
+    }
+  }
+}
+function drawToggle(label, key, x, y) {
+  const isOn = settings[key] === 1;
+  drawText(label, x, y + 32, 38, "left");
+  context.fillStyle = isOn ? "#4aa8ff" : "#555a66";
+  drawRoundedRect(x + 420, y + 8, 110, 48, 24); context.fill();
+  context.fillStyle = "#ffffff";
+  context.beginPath(); context.arc(x + 420 + (isOn ? 86 : 24), y + 32, 20, 0, Math.PI * 2); context.fill();
+  drawText(isOn ? "ON" : "OFF", x + 570, y + 32, 32, "left");
+  nextButtonList.push({ x: x, y: y, width: 680, height: 64, onClick: function () { settings[key] = isOn ? 0 : 1; } });
+}
+function drawAccelerationControl(y) {
+  const modes = Object.keys(accelerationModeLabels);
+  for (let index = 0; index < modes.length; index++) {
+    const mode = modes[index];
+    drawButton((settings.accelerationMode === mode ? "▶ " : "") + accelerationModeLabels[mode], 700 + index * 210, y, 200, 64, null, function () { settings.accelerationMode = mode; updateAccelerationExponent(); });
+  }
+}
 function drawSettingRows(rows) {
+  let y = 230;
   for (let index = 0; index < rows.length; index++) {
     const row = rows[index];
-    const y = 270 + index * 78;
-    const isToggle = row.max === 1 && row.min === 0;
-    drawText(row.label, 120, y + 30, 36, "left");
-    drawText(isToggle ? (settings[row.key] ? "ON" : "OFF") : String(settings[row.key]), 800, y + 30, 36, "right");
-    const deltas = [];
-    for (let stepIndex = 0; stepIndex < row.steps.length; stepIndex++) deltas.push(-row.steps[stepIndex]);
-    for (let stepIndex = row.steps.length - 1; stepIndex >= 0; stepIndex--) deltas.push(row.steps[stepIndex]);
-    for (let buttonIndex = 0; buttonIndex < deltas.length; buttonIndex++) {
-      const delta = deltas[buttonIndex];
-      const label = isToggle ? "切替" : (delta > 0 ? "+" : "") + delta;
-      drawButton(label, 880 + buttonIndex * 130, y, 120, 64, null, function () { updateSettingValue(row, isToggle ? (settings[row.key] ? -1 : 1) : delta); });
+    if (row.type === "toggles") {
+      drawToggle(row.items[0][1], row.items[0][0], 100, y);
+      drawToggle(row.items[1][1], row.items[1][0], 960, y);
+    } else {
+      drawText(row.label, 100, y + 32, 38, "left");
+      if (row.type === "slider") drawSliderControl(row, y, 700, 800);
+      else if (row.type === "buttons") drawStepButtons(row, y);
+      else if (row.type === "acceleration") {
+        drawAccelerationControl(y);
+        if (settings.accelerationMode === "custom") { y += 90; drawSliderControl(customAccelerationRow, y, 700, 800); }
+      }
     }
+    y += 90;
   }
 }
 function drawSettingsScene() {
@@ -792,33 +970,33 @@ function drawSettingsScene() {
   const tabNames = Object.keys(settingTabs);
   for (let index = 0; index < tabNames.length; index++) {
     const tabName = tabNames[index];
-    drawButton((tabName === selectedSettingTab ? "▶ " : "") + settingTabs[tabName].label, 60 + index * 360, 60, 340, 90, null, function () { selectedSettingTab = tabName; waitingKeyAction = null; });
+    drawButton((tabName === selectedSettingTab ? "▶ " : "") + settingTabs[tabName].label, 60 + index * 366, 60, 346, 90, null, function () { selectedSettingTab = tabName; waitingKeyAction = null; });
   }
   if (selectedSettingTab === "keys") {
     const actionNames = Object.keys(keyBindings);
     for (let index = 0; index < actionNames.length; index++) {
       const actionName = actionNames[index];
       const y = 270 + index * 110;
-      drawText(keyActionLabels[actionName], 120, y + 30, 40, "left");
-      drawText(keyBindings[actionName].join(" , ").toUpperCase(), 520, y + 30, 36, "left");
+      drawText(keyActionLabels[actionName], 100, y + 32, 40, "left");
+      drawText(keyBindings[actionName].join(" , ").toUpperCase(), 520, y + 32, 36, "left");
       drawButton(waitingKeyAction === actionName ? "キーを押す..." : "追加", 1300, y, 240, 70, null, function () { waitingKeyAction = actionName; });
       drawButton("初期化", 1560, y, 240, 70, null, function () { keyBindings[actionName] = defaultKeyBindings[actionName].slice(); });
     }
-    drawText("Escは一時停止専用です", 120, 700, 32, "left");
+    drawText("Escは一時停止専用です", 100, 700, 32, "left");
   } else if (selectedSettingTab === "account") {
-    drawText(account.user ? "状態: ログイン中 (" + account.displayName + ")" : "状態: ゲスト", 120, 300, 44, "left");
-    if (!supabaseClient) drawText("サーバー設定がまだ入っていません（supabaseUrl と supabaseAnonKey）", 120, 380, 32, "left", "#ffb3c0");
+    drawText(account.user ? "状態: ログイン中 (" + account.displayName + ")" : "状態: ゲスト", 100, 300, 44, "left");
+    if (!supabaseClient) drawText("サーバー設定がまだ入っていません（supabaseUrl と supabaseAnonKey）", 100, 380, 32, "left", "#ffb3c0");
     if (!account.user) {
-      drawButton("ログイン", 120, 450, 420, 100, "loginbutton", function () { openAccountModal("login"); });
-      drawButton("新規登録", 580, 450, 420, 100, "registerbutton", function () { openAccountModal("register"); });
+      drawButton("ログイン", 100, 450, 520, 100, "loginbutton", function () { openAccountModal("login"); });
+      drawButton("新規登録", 660, 450, 520, 100, "registerbutton", function () { openAccountModal("register"); });
     } else {
-      drawButton("ログアウト", 120, 450, 420, 100, "logoutbutton", startLogout);
+      drawButton("ログアウト", 100, 450, 520, 100, "logoutbutton", startLogout);
     }
-    drawButton("データを削除", 120, 600, 420, 100, "deletedatabutton", startDeleteData);
+    drawButton("データを削除", 100, 600, 520, 100, "deletedatabutton", startDeleteData);
   } else {
     drawSettingRows(settingTabs[selectedSettingTab].rows);
   }
-  drawText(settingsMessage, 120, 900, 34, "left", "#ffb3c0");
+  drawText(settingsMessage, 100, 900, 34, "left", "#ffb3c0");
   drawButton("戻る", 60, 960, 200, 90, "returnbutton", closeSettings);
 }
 
@@ -906,7 +1084,7 @@ async function submitAccountForm() {
   } catch (error) { setAccountError(errorDefinitions.network); }
 }
 async function startAccountSession(user) {
-  const guestScores = loadStoredValue("highScores", {});
+  const guestScores = Object.assign({}, getHighScores());
   const guestShards = loadStoredValue("soundShards", 0);
   const guestStory = loadStoredValue("storyProgress", 0);
   saveStoredValue("soundShards", 0);
@@ -919,13 +1097,11 @@ async function startAccountSession(user) {
   const scores = {};
   const rows = results[0].data || [];
   for (let index = 0; index < rows.length; index++) {
-    scores[rows[index].song_key + "_" + rows[index].difficulty] = { score: rows[index].score, rank: rows[index].rank, maxCombo: rows[index].max_combo, playCount: rows[index].play_count, fullCombo: false, allPerfect: false };
+    scores[rows[index].song_key + "_" + rows[index].difficulty] = { score: rows[index].score, status: rows[index].status, maxCombo: rows[index].max_combo, playCount: rows[index].play_count };
   }
   const guestKeys = Object.keys(guestScores);
   for (let index = 0; index < guestKeys.length; index++) {
-    const mine = guestScores[guestKeys[index]];
-    const theirs = scores[guestKeys[index]];
-    scores[guestKeys[index]] = !theirs || mine.score > theirs.score ? Object.assign({}, mine, { playCount: Math.max(mine.playCount, theirs ? theirs.playCount : 0) }) : Object.assign({}, theirs, { playCount: Math.max(mine.playCount, theirs.playCount) });
+    scores[guestKeys[index]] = scores[guestKeys[index]] ? mergeScoreEntries(scores[guestKeys[index]], guestScores[guestKeys[index]]) : guestScores[guestKeys[index]];
   }
   const progress = results[1].data || { sound_shards: 0, story_progress: 0 };
   saveStoredValue("highScores", scores);
@@ -936,6 +1112,13 @@ async function startAccountSession(user) {
   await saveCloudAll();
   if (progress.must_change_password) openAccountModal("reset");
 }
+// 譜面ごとの記録の統合: スコア・状態・最大コンボはそれぞれ高い方、プレイ回数は多い方を残す
+function mergeScoreEntries(first, second) {
+  return {
+    score: Math.max(first.score, second.score), status: Math.max(first.status || 2, second.status || 2),
+    maxCombo: Math.max(first.maxCombo, second.maxCombo), playCount: Math.max(first.playCount, second.playCount),
+  };
+}
 async function saveCloudAll() {
   if (!supabaseClient || !account.user) return;
   const userId = account.user.id;
@@ -945,7 +1128,7 @@ async function saveCloudAll() {
   for (let index = 0; index < entryKeys.length; index++) {
     const entry = highScores[entryKeys[index]];
     const splitAt = entryKeys[index].lastIndexOf("_");
-    rows.push({ user_id: userId, song_key: entryKeys[index].slice(0, splitAt), difficulty: entryKeys[index].slice(splitAt + 1), score: entry.score, max_combo: entry.maxCombo, rank: entry.rank, play_count: entry.playCount, updated_at: new Date().toISOString() });
+    rows.push({ user_id: userId, song_key: entryKeys[index].slice(0, splitAt), difficulty: entryKeys[index].slice(splitAt + 1), score: entry.score, status: entry.status, max_combo: entry.maxCombo, play_count: entry.playCount, updated_at: new Date().toISOString() });
   }
   try {
     const requests = [
@@ -958,6 +1141,7 @@ async function saveCloudAll() {
   } catch (error) { syncFailedUntil = performance.now() + 4000; }
 }
 function deleteAccountLocalData() {
+  highScoreCache = null;
   for (let index = 0; index < accountStoredNames.length; index++) localStorage.removeItem(accountStoragePrefix + accountStoredNames[index]);
 }
 async function startLogout() {
@@ -974,7 +1158,9 @@ async function startDeleteData() {
     for (let index = 0; index < names.length; index++) await supabaseClient.from(names[index]).delete().eq("user_id", account.user.id);
   }
   for (let index = 0; index < accountStoredNames.length; index++) localStorage.removeItem(storageKeyPrefix + accountStoredNames[index]);
+  highScoreCache = null;
   Object.assign(settings, defaultSettings);
+  updateAccelerationExponent();
 }
 function checkLoginState() {
   if (!supabaseClient) return;
@@ -990,6 +1176,8 @@ function runFrame(timestamp) {
   previousTimestamp = timestamp;
   buttonList = nextButtonList;
   nextButtonList = [];
+  sliderList = nextSliderList;
+  nextSliderList = [];
   if (currentScene === "play") updatePlay(deltaMilliseconds);
   if (currentScene === "loading") drawLoadingScene(timestamp);
   else if (currentScene === "title") drawTitleScene();

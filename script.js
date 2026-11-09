@@ -1005,8 +1005,10 @@ function drawSettingsScene() {
    ログイン中は localStorage のキー接頭辞を account 用に切り替え、ログアウトで消す。
    ログイン時: クラウドを取得 → ゲストのデータと合わせる（スコアは高い方、回数は多い方、音のかけらは足して、ゲスト側は0に戻す）→ 保存。
    保存に失敗しても止めず、次の保存でまとめて再送する */
-const supabaseUrl = "";
-const supabaseAnonKey = "";
+const supabaseUrl = "https://vfkvglqfqogqxlpmmhbg.supabase.co";
+const supabaseAnonKey = "sb_publishable_ZUPIdWJp8yTA6vpiW9Yhpg_cUPn98d6";
+//NEXT_PUBLIC_SUPABASE_URL=https://vfkvglqfqogqxlpmmhbg.supabase.co
+//NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_ZUPIdWJp8yTA6vpiW9Yhpg_cUPn98d6
 const supabaseClient = (supabaseUrl && window.supabase) ? window.supabase.createClient(supabaseUrl, supabaseAnonKey) : null;
 const guestStoragePrefix = "plurythme_guest_";
 const accountStoragePrefix = "plurythme_account_";

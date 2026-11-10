@@ -18,7 +18,32 @@ const audioFiles = createFileTable([
   "hitperfect", "hitgood", "hitmiss", "hitsoundshard", "hitdamage",
   "clearjingle", "fullcombojingle", "allperfectjingle",
 ]);
-const imageFiles = createFileTable([
+// 推奨サイズ[幅, 高さ]。レイアウトはこのサイズ前提で重ならないように組んである（あとで画像に合わせて変えてよい）
+const imageSizes = {
+  load1: [240, 240], load2: [240, 240], nextbutton: [400, 110], titleimg: [1920, 1080], titlelogo: [960, 300],
+  startbutton: [400, 120], skipbutton: [220, 80], selectbackground: [1920, 1080], playbutton: [780, 120],
+  settingbutton: [300, 100], returnbutton: [200, 100], songframe: [800, 100],
+  difficulty_easy: [230, 100], difficulty_normal: [230, 100], difficulty_hard: [230, 100],
+  playbackground: [1920, 1080], maincharacter_back: [140, 180], note_tap: [255, 36], note_soundshard: [52, 52], note_damage: [170, 36],
+  judge_perfect: [400, 100], judge_good: [400, 100], judge_miss: [400, 100], readyimg: [600, 150], goimg: [400, 150],
+  countdown_3: [220, 220], countdown_2: [220, 220], countdown_1: [220, 220],
+  pausebutton: [90, 90], resumebutton: [500, 100], restartbutton: [500, 100],
+  clearimg: [900, 200], fullcomboimg: [900, 200], allperfectimg: [900, 200],
+  resultbackground: [1920, 1080], retrybutton: [380, 100], maincharacter_front: [780, 820], newrecord: [300, 60],
+  rankSS: [220, 220], rankS: [220, 220], rankA: [220, 220], rankB: [220, 220], rankC: [220, 220], rankD: [220, 220],
+  judgeoffset_minus100: [110, 64], judgeoffset_minus10: [110, 64], judgeoffset_minus1: [110, 64],
+  judgeoffset_plus1: [110, 64], judgeoffset_plus10: [110, 64], judgeoffset_plus100: [110, 64],
+  loginbutton: [520, 100], registerbutton: [520, 100], deletedatabutton: [520, 100], logoutbutton: [520, 100],
+};
+function createImageTable(keys) {
+  const table = {};
+  for (let index = 0; index < keys.length; index++) {
+    const size = imageSizes[keys[index]] || (keys[index].indexOf("storyimg") === 0 ? [1920, 1080] : [100, 100]);
+    table[keys[index]] = { link: "", width: size[0], height: size[1] };
+  }
+  return Object.freeze(table);
+}
+const imageFiles = createImageTable([
   "load1", "load2", "nextbutton", "titleimg", "titlelogo", "startbutton", "skipbutton",
 ].concat(createNumberedKeys("storyimg", 16, 2), [
   "selectbackground", "playbutton", "settingbutton", "returnbutton", "songframe",
@@ -193,7 +218,8 @@ function drawRoundedRect(x, y, width, height, radius) {
   context.arcTo(x, y, x + width, y, radius);
   context.closePath();
 }
-function drawButton(label, x, y, width, height, imageKey, onClick) {
+function drawButton(label, x, y, width, height, imageKey, onClick, options) {
+  const buttonOptions = options || {};
   const isHovered = pointerPosition.x >= x && pointerPosition.x <= x + width && pointerPosition.y >= y && pointerPosition.y <= y + height;
   const image = imageKey ? getImage(imageKey) : null;
   context.save();
@@ -201,6 +227,7 @@ function drawButton(label, x, y, width, height, imageKey, onClick) {
   if (isHovered) context.scale(buttonHoverScale, buttonHoverScale);
   if (image) {
     context.drawImage(image, -width / 2, -height / 2, width, height);
+    if (buttonOptions.isLabelOverImage) drawText(label, 0, 0, Math.min(44, height * 0.5), "center");
   } else {
     context.fillStyle = isHovered ? "rgba(40, 80, 130, 0.95)" : "rgba(20, 40, 70, 0.85)";
     drawRoundedRect(-width / 2, -height / 2, width, height, Math.min(24, height / 3));
@@ -209,6 +236,12 @@ function drawButton(label, x, y, width, height, imageKey, onClick) {
     context.lineWidth = 3;
     context.stroke();
     drawText(label, 0, 0, Math.min(44, height * 0.5), "center");
+  }
+  if (buttonOptions.isHighlighted) {
+    context.strokeStyle = "#ffe066";
+    context.lineWidth = 6;
+    drawRoundedRect(-width / 2 - 5, -height / 2 - 5, width + 10, height + 10, Math.min(28, height / 3 + 5));
+    context.stroke();
   }
   context.restore();
   nextButtonList.push({ x: x, y: y, width: width, height: height, onClick: onClick });
@@ -221,6 +254,19 @@ function drawImageOrFrame(key, x, y, width, height, label) {
   drawRoundedRect(x, y, width, height, 20);
   context.stroke();
   drawText(label === undefined ? key : label, x + width / 2, y + height / 2, Math.min(40, height / 4), "center");
+}
+function drawBackground(key, color) {
+  const image = getImage(key);
+  if (image) { context.drawImage(image, 0, 0, canvasLogicalWidth, canvasLogicalHeight); return; }
+  context.fillStyle = color;
+  context.fillRect(0, 0, canvasLogicalWidth, canvasLogicalHeight);
+}
+function drawCenteredImageOrText(key, text, centerX, centerY, textSize, color, scale) {
+  const image = getImage(key);
+  if (!image) { drawText(text, centerX, centerY, textSize, "center", color); return; }
+  const width = imageFiles[key].width * (scale || 1);
+  const height = imageFiles[key].height * (scale || 1);
+  context.drawImage(image, centerX - width / 2, centerY - height / 2, width, height);
 }
 function convertToLogicalPoint(clientX, clientY) {
   const rectangle = canvas.getBoundingClientRect();
@@ -270,7 +316,7 @@ function drawLoadingScene(nowMilliseconds) {
   context.fillRect(0, 0, canvasLogicalWidth, canvasLogicalHeight);
   drawText("Plurythme", 960, 440, 96, "center");
   const frameIndex = Math.floor(nowMilliseconds / loadingSwitchIntervalMilliseconds) % loadingAnimationImageKeys.length;
-  drawImageOrFrame(loadingAnimationImageKeys[frameIndex], 1620, 780, 240, 240);
+  if (!isLoadingFinished) drawImageOrFrame(loadingAnimationImageKeys[frameIndex], 1620, 780, 240, 240);
   if (!isLoadingFinished) { drawText("Now Loading...", 960, 600, 48, "center"); return; }
   drawButton("次へ", 760, 560, 400, 110, null, function () { startBackgroundMusic("titlebgm"); currentScene = "title"; });
 }
@@ -314,32 +360,26 @@ function getHighScores() {
 }
 function getHighScoreEntry(songKey, difficultyName) { return getHighScores()[songKey + "_" + difficultyName] || null; }
 function drawSongSelectScene() {
-  context.fillStyle = "#0b1020";
-  context.fillRect(0, 0, canvasLogicalWidth, canvasLogicalHeight);
+  drawBackground("selectbackground", "#0b1020");
   for (let index = 0; index < songKeys.length; index++) {
     const isSelected = index === selectedSongIndex;
     const rowIndex = index;
-    drawButton(songs[songKeys[index]].title, 100, 300 + index * 140 - (isSelected ? 15 : 0), isSelected ? 960 : 880, isSelected ? 120 : 90, null, function () { selectedSongIndex = rowIndex; });
+    drawButton(songs[songKeys[index]].title, 100, 300 + index * 140 - (isSelected ? 5 : 0), isSelected ? 880 : 800, isSelected ? 110 : 100, "songframe", function () { selectedSongIndex = rowIndex; }, { isLabelOverImage: true });
   }
   for (let index = 0; index < difficultyNames.length; index++) {
     const difficultyIndex = index;
-    drawButton(difficultyNames[index], 1080 + index * 270, 300, 250, 100, null, function () { selectedDifficultyIndex = difficultyIndex; });
-    if (index === selectedDifficultyIndex) {
-      context.strokeStyle = "#ffe066"; context.lineWidth = 6;
-      drawRoundedRect(1080 + index * 270 - 4, 296, 258, 108, 30);
-      context.stroke();
-    }
+    drawButton(difficultyNames[index], 1100 + index * 270, 300, 230, 100, "difficulty_" + difficultyNames[index], function () { selectedDifficultyIndex = difficultyIndex; }, { isHighlighted: index === selectedDifficultyIndex });
   }
   const songKey = songKeys[selectedSongIndex];
   const difficultyName = difficultyNames[selectedDifficultyIndex];
   const entry = getHighScoreEntry(songKey, difficultyName);
-  drawText("Lv." + Math.floor(songs[songKey][difficultyName].difficulty), 1080, 520, 64, "left");
-  drawText(entry ? calculateRankName(entry.score) : "-", 1340, 520, 64, "left", "#ffe066");
-  drawText(entry ? statusNames[entry.status] : "---", 1500, 520, 48, "left");
-  drawText("HIGH SCORE  " + (entry ? String(entry.score).padStart(7, "0") : "---"), 1080, 620, 48, "left");
-  drawButton("ゲームスタート", 1080, 780, 780, 120, "playbutton", function () { startPlay(songKey, difficultyName); });
-  drawButton("戻る", 60, 60, 160, 90, "returnbutton", function () { currentScene = "title"; });
-  drawButton("設定", 260, 60, 200, 90, "settingbutton", function () { openSettings("songSelect"); });
+  drawText("Lv." + Math.floor(songs[songKey][difficultyName].difficulty), 1100, 520, 64, "left");
+  drawText(entry ? calculateRankName(entry.score) : "-", 1360, 520, 64, "left", "#ffe066");
+  drawText(entry ? statusNames[entry.status] : "---", 1520, 520, 48, "left");
+  drawText("HIGH SCORE  " + (entry ? String(entry.score).padStart(7, "0") : "---"), 1100, 620, 48, "left");
+  drawButton("ゲームスタート", 1100, 780, 780, 120, "playbutton", function () { startPlay(songKey, difficultyName); });
+  drawButton("戻る", 60, 60, 200, 100, "returnbutton", function () { currentScene = "title"; });
+  drawButton("設定", 300, 60, 300, 100, "settingbutton", function () { openSettings("songSelect"); });
 }
 
 /* ===== 譜面の時間変換 =====
@@ -407,7 +447,7 @@ function startPlay(songKey, difficultyName) {
     mode: "running", playTimeMilliseconds: 0, countdownRemaining: 0, endTimer: 0,
     currentLaneIndex: 0, visualLanePosition: 0, laneActiveUntil: {},
     score: 0, combo: 0, maxCombo: 0, hitPoints: maximumHitPoints, comboBreakCount: 0,
-    judgeCounts: { PERFECT: 0, GOOD: 0, MISS: 0 }, lastJudge: null, lastJudgeTime: 0, fastCount: 0, lateCount: 0, lastFastLate: "", pendingHitTime: null, pendingHitDeadline: 0, isEffectSoundPlayed: false,
+    judgeCounts: { PERFECT: 0, GOOD: 0, MISS: 0 }, lastJudge: null, lastJudgeTime: 0, fastCount: 0, lateCount: 0, lastFastLate: "", isGoSoundPlayed: false, lastCountdownNumber: 0, pendingHitTime: null, pendingHitDeadline: 0, isEffectSoundPlayed: false,
     totalTapCount: totalTapCount, totalSoundShardCount: totalSoundShardCount, collectedSoundShardCount: 0,
   };
   play.playTimeMilliseconds = play.startTime;
@@ -422,7 +462,10 @@ function startPlay(songKey, difficultyName) {
    差が judgeWidth[0] 以内で PERFECT、[1] 以内で GOOD。見逃しは [1] を過ぎたら MISS */
 function getJudgeTime() { return play.playTimeMilliseconds + settings.judgeOffsetMilliseconds; }
 function updateComboBreak() { play.combo = 0; play.comboBreakCount++; }
-function updateHitPoints(amount) { play.hitPoints = Math.max(0, Math.min(maximumHitPoints, play.hitPoints + amount)); }
+function updateHitPoints(amount) {
+  if (amount > 0 && play.hitPoints <= 0) return;
+  play.hitPoints = Math.max(0, Math.min(maximumHitPoints, play.hitPoints + amount));
+}
 function updateJudgeResult(judgeName, earlyMilliseconds) {
   play.judgeCounts[judgeName]++;
   if (judgeName === "GOOD") {
@@ -524,15 +567,22 @@ function updateVisualLane(deltaMilliseconds) {
 function updatePlay(deltaMilliseconds) {
   if (play.mode === "countdown") {
     play.countdownRemaining -= deltaMilliseconds;
+    const countdownNumber = Math.ceil(play.countdownRemaining / countdownStepMilliseconds);
+    if (countdownNumber > 0 && countdownNumber !== play.lastCountdownNumber) { play.lastCountdownNumber = countdownNumber; playSoundEffect("countdown", settings.playSeVolume); }
     if (play.countdownRemaining <= 0) { play.mode = "running"; resumeSongAudio(); }
     return;
   }
   if (play.mode === "running") {
     play.playTimeMilliseconds += deltaMilliseconds;
     updateSongAudioSync();
+    if (!play.isGoSoundPlayed && play.playTimeMilliseconds - play.startTime >= readyDisplayMilliseconds) { play.isGoSoundPlayed = true; playSoundEffect("go", settings.playSeVolume); }
     updateVisualLane(deltaMilliseconds);
     updateJudgement();
-    if (play.playTimeMilliseconds > play.lastTime) { play.mode = "ending"; play.endTimer = 0; }
+    if (play.playTimeMilliseconds > play.lastTime + judgeWidthMilliseconds[1] + simultaneousInputWindowMilliseconds) {
+      updateFinishUnresolvedNotes();
+      play.mode = "ending";
+      play.endTimer = judgeWidthMilliseconds[1] + simultaneousInputWindowMilliseconds;
+    }
     return;
   }
   if (play.mode === "ending") {
@@ -546,8 +596,17 @@ function updatePlay(deltaMilliseconds) {
     if (play.endTimer >= resultEffectDelayMilliseconds + resultEffectDisplayMilliseconds + resultFadeOutMilliseconds) startResult();
   }
 }
+// 終了時に判定されていないタップが残っていたら、MISS として数える（取りこぼし防止の保険）
+function updateFinishUnresolvedNotes() {
+  for (let index = 0; index < play.notes.length; index++) {
+    if (play.notes[index].type === noteTypes.tap && !play.notes[index].isResolved) {
+      play.notes[index].isResolved = true;
+      updateJudgeResult("MISS", 0);
+    }
+  }
+}
 function updatePause() { if (play.mode === "running") { play.mode = "paused"; pauseSongAudio(); } }
-function startResume() { play.mode = "countdown"; play.countdownRemaining = countdownStepMilliseconds * countdownStepCount; }
+function startResume() { play.lastCountdownNumber = 0; play.mode = "countdown"; play.countdownRemaining = countdownStepMilliseconds * countdownStepCount; }
 
 /* ===== プレイ: 描画 =====
    t = (ノーツ時刻 - 現在時刻) / 先読み時間（1=奥、0=判定ライン）、s = t の加速指数乗（過ぎたあとは線形）。
@@ -601,10 +660,18 @@ function drawGuide(note) {
   context.closePath(); context.fill();
   context.globalAlpha = 1;
 }
+const noteImageKeys = Object.freeze({ 1: "note_tap", 3: "note_soundshard", 4: "note_damage" });
 function drawNote(note) {
   const s = getDepthScale(note.timeMilliseconds);
   if (s > 1 || s < -0.15) return;
   const point = projectPoint(note.lane, s);
+  const sizeRatio = point.depth * settings.laneWidthAtJudgeLine / defaultLaneWidthAtJudgeLine;
+  const image = getImage(noteImageKeys[note.type]);
+  if (image) {
+    const size = imageFiles[noteImageKeys[note.type]];
+    context.drawImage(image, point.x - size.width * sizeRatio / 2, point.y - size.height * sizeRatio / 2, size.width * sizeRatio, size.height * sizeRatio);
+    return;
+  }
   const width = settings.laneWidthAtJudgeLine * 0.85 * point.depth;
   const height = 36 * point.depth;
   if (note.type === noteTypes.tap) { context.fillStyle = "#ffe066"; context.fillRect(point.x - width / 2, point.y - height / 2, width, height); }
@@ -618,13 +685,14 @@ function drawHitPointBar() {
   context.fillRect(1380, 40, 480 * ratio, 34);
   drawText(String(Math.ceil(play.hitPoints)), 1350, 57, 40, "right");
 }
+const endEffectImageKeys = Object.freeze({ "ALL PERFECT": "allperfectimg", "FULL COMBO": "fullcomboimg", "CLEAR": "clearimg", "": "clearimg" });
 function getEndEffectLabel() {
-  if (play.comboBreakCount === 0 && play.judgeCounts.GOOD === 0) return "ALL PERFECT";
+  if (play.comboBreakCount === 0 && play.judgeCounts.PERFECT === play.totalTapCount) return "ALL PERFECT";
   if (play.comboBreakCount === 0) return "FULL COMBO";
   return play.hitPoints > 0 ? "CLEAR" : "";
 }
 function drawPlayScene() {
-  context.fillStyle = "#0b1020"; context.fillRect(0, 0, canvasLogicalWidth, canvasLogicalHeight);
+  drawBackground("playbackground", "#0b1020");
   drawLanes();
   for (let index = 0; index < play.notes.length; index++) { if (play.notes[index].type === noteTypes.guide) drawGuide(play.notes[index]); }
   for (let index = 0; index < play.notes.length; index++) { if (!play.notes[index].isResolved && play.notes[index].type !== noteTypes.guide) drawNote(play.notes[index]); }
@@ -637,14 +705,14 @@ function drawPlayScene() {
     drawText(String(play.combo), comboX, comboY, 120, "center");
     drawText("COMBO", comboX, comboY + 80, 40, "center");
   }
-  if (play.lastJudge && settings["is" + play.lastJudge.charAt(0) + play.lastJudge.slice(1).toLowerCase() + "Displayed"] && play.playTimeMilliseconds - play.lastJudgeTime < 300) drawText(play.lastJudge, canvasLogicalWidth / 2, canvasLogicalHeight * 0.62, 64, "center", play.lastJudge === "MISS" ? "#ff8899" : "#ffffff");
+  if (play.lastJudge && settings["is" + play.lastJudge.charAt(0) + play.lastJudge.slice(1).toLowerCase() + "Displayed"] && play.playTimeMilliseconds - play.lastJudgeTime < 300) drawCenteredImageOrText("judge_" + play.lastJudge.toLowerCase(), play.lastJudge, canvasLogicalWidth / 2, canvasLogicalHeight * 0.62, 64, play.lastJudge === "MISS" ? "#ff8899" : "#ffffff");
   if (play.lastJudge === "GOOD" && settings.isFastLateDisplayed && play.playTimeMilliseconds - play.lastJudgeTime < 300) drawText(play.lastFastLate, canvasLogicalWidth / 2, canvasLogicalHeight * 0.62 - 70, 38, "center", play.lastFastLate === "FAST" ? "#6ec1ff" : "#ff7a7a");
   const elapsed = play.playTimeMilliseconds - play.startTime;
-  if (elapsed < readyDisplayMilliseconds) drawText("Ready...", 960, 400, 110, "center");
-  else if (elapsed < readyDisplayMilliseconds + goDisplayMilliseconds) drawText("Go!", 960, 400, 130, "center");
+  if (elapsed < readyDisplayMilliseconds) drawCenteredImageOrText("readyimg", "Ready...", 960, 400, 110, "#ffffff");
+  else if (elapsed < readyDisplayMilliseconds + goDisplayMilliseconds) drawCenteredImageOrText("goimg", "Go!", 960, 400, 130, "#ffffff");
   if (play.mode === "ending") {
     const effectEnd = resultEffectDelayMilliseconds + resultEffectDisplayMilliseconds;
-    if (play.endTimer >= resultEffectDelayMilliseconds && play.endTimer < effectEnd) drawText(getEndEffectLabel(), 960, 480, 150, "center", "#ffe066");
+    if (play.endTimer >= resultEffectDelayMilliseconds && play.endTimer < effectEnd) drawCenteredImageOrText(endEffectImageKeys[getEndEffectLabel()], getEndEffectLabel(), 960, 480, 150, "#ffe066");
     if (play.endTimer >= effectEnd) { context.fillStyle = "rgba(0,0,0," + Math.min(1, (play.endTimer - effectEnd) / resultFadeOutMilliseconds) + ")"; context.fillRect(0, 0, canvasLogicalWidth, canvasLogicalHeight); }
   }
   if (play.mode === "paused" || play.mode === "countdown") {
@@ -652,12 +720,12 @@ function drawPlayScene() {
   }
   if (play.mode === "paused") {
     drawText("一時停止", 960, 260, 80, "center");
-    drawButton("再開", 710, 360, 500, 100, null, startResume);
-    drawButton("やり直し", 710, 490, 500, 100, null, function () { startPlay(play.songKey, play.difficultyName); });
-    drawButton("設定", 710, 620, 500, 100, "settingbutton", function () { openSettings("play"); });
-    drawButton("曲選択へ", 710, 750, 500, 100, "returnbutton", function () { stopSongAudio(); currentScene = "songSelect"; });
+    drawButton("再開", 710, 360, 500, 100, "resumebutton", startResume);
+    drawButton("やり直し", 710, 490, 500, 100, "restartbutton", function () { startPlay(play.songKey, play.difficultyName); });
+    drawButton("設定", 810, 620, 300, 100, "settingbutton", function () { openSettings("play"); });
+    drawButton("曲選択へ", 860, 750, 200, 100, "returnbutton", function () { stopSongAudio(); currentScene = "songSelect"; });
   }
-  if (play.mode === "countdown") drawText(String(Math.ceil(play.countdownRemaining / countdownStepMilliseconds)), 960, 540, 220, "center");
+  if (play.mode === "countdown") drawCenteredImageOrText("countdown_" + Math.ceil(play.countdownRemaining / countdownStepMilliseconds), String(Math.ceil(play.countdownRemaining / countdownStepMilliseconds)), 960, 540, 220, "#ffffff");
   if (play.mode === "running" || play.mode === "ending") drawButton("Ⅱ", 1780, 100, 90, 90, "pausebutton", updatePause);
 }
 
@@ -671,11 +739,11 @@ function calculateRankName(score) {
   return "D";
 }
 function startResult() {
-  const score = play.judgeCounts.GOOD === 0 && play.judgeCounts.MISS === 0 ? fullScore : Math.round(play.score);
+  const score = play.judgeCounts.PERFECT === play.totalTapCount ? fullScore : Math.round(play.score);
   const difficultyValue = play.song[play.difficultyName].difficulty;
   const reward = play.totalSoundShardCount === 0 ? 0 : Math.floor(Math.pow(play.collectedSoundShardCount / play.totalSoundShardCount * difficultyValue * soundShardRewardMultiple, soundShardRewardExponent));
   const isFullCombo = play.comboBreakCount === 0;
-  const isAllPerfect = isFullCombo && play.judgeCounts.GOOD === 0;
+  const isAllPerfect = isFullCombo && play.judgeCounts.PERFECT === play.totalTapCount;
   const status = isAllPerfect ? 4 : isFullCombo ? 3 : play.hitPoints > 0 ? 2 : 1;
   const highScores = Object.assign({}, getHighScores());
   const entryKey = play.songKey + "_" + play.difficultyName;
@@ -691,12 +759,12 @@ function startResult() {
   currentScene = "result";
 }
 function drawResultScene() {
-  context.fillStyle = "#0b1020"; context.fillRect(0, 0, canvasLogicalWidth, canvasLogicalHeight);
+  drawBackground("resultbackground", "#0b1020");
   drawText(songs[result.songKey].title + "  [" + result.difficultyName + " Lv." + Math.floor(songs[result.songKey][result.difficultyName].difficulty) + "]", 960, 70, 56, "center");
   drawImageOrFrame("maincharacter_front", 120, 160, 780, 820);
   drawImageOrFrame("rank" + result.rank, 1000, 150, 220, 220, result.rank);
   drawText(String(result.score).padStart(7, "0"), 1260, 250, 80, "left");
-  if (result.isNewRecord) drawText("NEW RECORD", 1260, 330, 36, "left", "#ffe066");
+  if (result.isNewRecord) drawCenteredImageOrText("newrecord", "NEW RECORD", 1410, 330, 36, "#ffe066");
   for (let index = 0; index < judgeNames.length; index++) {
     drawText(judgeNames[index], 1060, 450 + index * 70, 48, "left");
     drawText(String(result.counts[judgeNames[index]]), 1700, 450 + index * 70, 48, "right");
@@ -705,10 +773,10 @@ function drawResultScene() {
   drawText(String(result.fastCount), 1700, 640, 34, "right");
   drawText("LATE", 1100, 682, 34, "left", "#ff7a7a");
   drawText(String(result.lateCount), 1700, 682, 34, "right");
-  drawText(result.isAllPerfect ? "ALL PERFECT" : result.isFullCombo ? "FULL COMBO" : "", 1380, 770, 60, "center", "#ffe066");
+  if (result.isAllPerfect || result.isFullCombo) drawCenteredImageOrText(result.isAllPerfect ? "allperfectimg" : "fullcomboimg", result.isAllPerfect ? "ALL PERFECT" : "FULL COMBO", 1380, 770, 60, "#ffe066", 0.5);
   drawText("MAX COMBO  " + result.maxCombo, 1060, 860, 52, "left");
   drawButton("リトライ", 1000, 910, 380, 100, "retrybutton", function () { startPlay(result.songKey, result.difficultyName); });
-  drawButton("曲選択へ", 1440, 910, 380, 100, "returnbutton", function () { currentScene = "songSelect"; });
+  drawButton("曲選択へ", 1440, 910, 200, 100, "returnbutton", function () { currentScene = "songSelect"; });
 }
 
 /* ===== キー入力 =====
@@ -997,7 +1065,7 @@ function drawSettingsScene() {
     drawSettingRows(settingTabs[selectedSettingTab].rows);
   }
   drawText(settingsMessage, 100, 900, 34, "left", "#ffb3c0");
-  drawButton("戻る", 60, 960, 200, 90, "returnbutton", closeSettings);
+  drawButton("戻る", 60, 950, 200, 100, "returnbutton", closeSettings);
 }
 
 /* ===== アカウント（Supabase）=====
@@ -1005,10 +1073,8 @@ function drawSettingsScene() {
    ログイン中は localStorage のキー接頭辞を account 用に切り替え、ログアウトで消す。
    ログイン時: クラウドを取得 → ゲストのデータと合わせる（スコアは高い方、回数は多い方、音のかけらは足して、ゲスト側は0に戻す）→ 保存。
    保存に失敗しても止めず、次の保存でまとめて再送する */
-const supabaseUrl = "https://vfkvglqfqogqxlpmmhbg.supabase.co";
-const supabaseAnonKey = "sb_publishable_ZUPIdWJp8yTA6vpiW9Yhpg_cUPn98d6";
-//NEXT_PUBLIC_SUPABASE_URL=https://vfkvglqfqogqxlpmmhbg.supabase.co
-//NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_ZUPIdWJp8yTA6vpiW9Yhpg_cUPn98d6
+const supabaseUrl = "";
+const supabaseAnonKey = "";
 const supabaseClient = (supabaseUrl && window.supabase) ? window.supabase.createClient(supabaseUrl, supabaseAnonKey) : null;
 const guestStoragePrefix = "plurythme_guest_";
 const accountStoragePrefix = "plurythme_account_";

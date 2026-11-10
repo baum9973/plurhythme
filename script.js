@@ -57,6 +57,9 @@ const imageFiles = createImageTable([
   "judgeoffset_plus1", "judgeoffset_plus10", "judgeoffset_plus100",
   "loginbutton", "registerbutton", "deletedatabutton", "logoutbutton",
 ]));
+
+const defaultLaneWidthAtJudgeLine = 300;
+
 const loadingAnimationImageKeys = Object.freeze(["load1", "load2"]);
 const loadingSwitchIntervalMilliseconds = 150;
 const difficultyNames = Object.freeze(["easy", "normal", "hard"]);
